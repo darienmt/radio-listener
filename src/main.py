@@ -1,5 +1,7 @@
 import argparse
 import pyaudio
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from queue import Queue
 from threading import Thread
 from datetime import datetime
@@ -17,8 +19,20 @@ def listening(recognizer, selected_device_index, control, bus, output):
             bus.put( recognizer.listen(source) )
 
 def outputWriter(control, output):
+    logger = logging.getLogger("AirLog")
+    logger.setLevel(logging.INFO)
+
+    handler =  TimedRotatingFileHandler(
+        ".logs/air-traffic.log", 
+        when="h",
+        interval= 1
+    )
+    logger.addHandler(handler)
+
     while not control.empty():
-        print(f"[{datetime.now()}] : {output.get()}")
+        message = f"[{datetime.now()}] : {output.get()}"
+        print( message )
+        logger.info(message)
 
 def toText(recognizer, control, bus, output):
     while not control.empty():
