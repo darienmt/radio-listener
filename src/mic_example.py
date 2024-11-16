@@ -1,47 +1,34 @@
-import argparse
+import pyaudio
 
 import speech_recognition as sr
 import time
+from datetime import datetime
+
+from select_input import select_device_index
 
 # this is called from the background thread
 def callback(recognizer, audio):
     # received audio data, now we'll recognize it using Google Speech Recognition
     try:
         text = recognizer.recognize_whisper(audio)
-        print("Said: " + text)
+        print(f"[{datetime.now()}]: {text}")
     except sr.UnknownValueError:
         print("Could not understand audio")
     except sr.RequestError as e:
         print("Could not get results from API; {0}".format(e))
 
-def select_device_index():
-    devices = sr.Microphone.list_microphone_names()
-    device_index = None
-    while device_index is None:
-        print("Select Device:")
-        for index, name in enumerate(devices):
-            print(f"Index: {index} - {name}")
-        device = input("Enter device index: ")
-        try:
-            device_index = int(device)
-        except ValueError:
-            print("Invalid input. Please enter an integer")
-            continue
-        
-        if device_index >= len(devices):
-            print("Please enter one of the shown indexes")
-            device_index = None
-    return device_index
-
 def main():
-    # for index, name in enumerate(sr.Microphone.list_microphone_names()):
-    #     print(f"{index} - {name}")    
+    p = pyaudio.PyAudio()
+
+    selected_input = select_device_index(p)
+    if selected_input is None:
+        return
     
-    device_index = select_device_index()
+    device_index = selected_input["index"]
     r = sr.Recognizer()
-    m = sr.Microphone(device_index=device_index)
+    m = sr.Microphone(device_index=device_index, sample_rate=16000)
 
-
+    print("Listening...")
     stop_listening = r.listen_in_background(m, callback)
 
     while True:

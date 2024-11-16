@@ -1,4 +1,3 @@
-import time
 from queue import Queue
 from threading import Thread
 import pyaudio
@@ -13,7 +12,7 @@ def listening(p, selected_input, control, bus, output):
     try:
         input_stream = p.open(
                     input_device_index=selected_input["index"],
-                    channels=2, format=pyaudio.paInt16,
+                    channels=1, format=pyaudio.paInt16,
                     rate=SAMPLE_RATE, frames_per_buffer=10*CHUNK, input=True,
                 )
         frames = []
