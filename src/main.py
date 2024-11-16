@@ -14,37 +14,43 @@ def listening(recognizer, selected_device_index, control, bus, output):
     m = sr.Microphone(device_index=selected_device_index, sample_rate=16000)
     with m as source:
         recognizer.adjust_for_ambient_noise(source)
-        output.put("Listening...")
+        output.put({ "time": datetime.now(), "message": "Listening" })
         while not control.empty():
             bus.put( recognizer.listen(source) )
 
-def outputWriter(control, output):
+def output_writer(logPath, model_description, control, output):
     logger = logging.getLogger("AirLog")
     logger.setLevel(logging.INFO)
 
     handler =  TimedRotatingFileHandler(
-        ".logs/air-traffic.log", 
-        when="h",
+        logPath, 
+        when="d",
         interval= 1
     )
     logger.addHandler(handler)
 
     while not control.empty():
-        message = f"[{datetime.now()}] : {output.get()}"
+        data = output.get()
+        message = f"[{ data.get('time') }][{model_description}] : { data.get('message') }"
         print( message )
         logger.info(message)
 
-def toText(recognizer, control, bus, output):
+def recognize_whisper(recognizer, model, control, bus, output):
     while not control.empty():
         try:
-            text = recognizer.recognize_whisper(bus.get())
-            output.put(text)
+            data = bus.get()
+            now = datetime.now()
+            text = recognizer.recognize_whisper(data, model=model)            
+            output.put({ "time": now, "message": text })
         except sr.UnknownValueError:
             output.put("Could not understand audio")
         except sr.RequestError as e:
             output.put("Could not get results from API; {0}".format(e))
 
 def start_processing(device_index):
+
+    model_name = "medium"
+    
     messages = Queue()
     recordings = Queue()
     output = Queue()
@@ -55,25 +61,26 @@ def start_processing(device_index):
     listener = Thread(target=listening, args=(r, device_index, messages, recordings, output,), daemon=True)
     listener.start()
 
-    converter = Thread(target=toText, args=(r, messages, recordings, output,), daemon=True)
-    converter.start()
+    recognizer = Thread(target=recognize_whisper, args=(r, model_name, messages, recordings, output,), daemon=True)
+    recognizer.start()
 
-    writer = Thread(target=outputWriter, args=(messages,output,), daemon=True)
+    writer = Thread(target=output_writer, args=(".logs/air-traffic.log", f"Whisper:{model_name}", messages,output,), daemon=True)
     writer.start()
     
     input()
     messages.get()
-
-    listener.join()
-    converter.join()
-    writer.join()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device-index", help="Device index")
     args = parser.parse_args()
-    device_index = args.device_index
+    try:
+        device_index = int(args.device_index)    
+    except ValueError:
+        print("Device index must be an integer")
+        return
+    
     if device_index is None:
 
         p = pyaudio.PyAudio()

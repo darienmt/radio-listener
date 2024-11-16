@@ -163,4 +163,5 @@ cython_debug/
 
 .wheels/
 .audio/
-.logs/**.log
+.logs/**
+!.logs/.gitkeep
