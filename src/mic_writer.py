@@ -24,8 +24,8 @@ def output_writer(logPath, model_description, control, output):
 
     handler =  TimedRotatingFileHandler(
         logPath, 
-        when="d",
-        interval= 1
+        when="h",
+        interval= 4
     )
     logger.addHandler(handler)
 
@@ -50,7 +50,7 @@ def recognize_whisper(recognizer, model, control, bus, output):
 def start_processing(device_index):
 
     model_name = "medium"
-    
+
     messages = Queue()
     recordings = Queue()
     output = Queue()
@@ -64,7 +64,7 @@ def start_processing(device_index):
     recognizer = Thread(target=recognize_whisper, args=(r, model_name, messages, recordings, output,), daemon=True)
     recognizer.start()
 
-    writer = Thread(target=output_writer, args=(".logs/air-traffic.log", f"Whisper:{model_name}", messages,output,), daemon=True)
+    writer = Thread(target=output_writer, args=(".logs/radio-traffic.log", f"Whisper:{model_name}", messages,output,), daemon=True)
     writer.start()
     
     input()
