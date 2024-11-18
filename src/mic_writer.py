@@ -75,11 +75,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device-index", help="Device index")
     args = parser.parse_args()
-    try:
-        device_index = int(args.device_index)    
-    except ValueError:
-        print("Device index must be an integer")
-        return
+    input_device_index = args.device_index
+    device_index = None
+    if input_device_index is not None:
+        try:
+            device_index = int(input_device_index)    
+        except ValueError:
+            print("Device index must be an integer")
+            return
     
     if device_index is None:
 
