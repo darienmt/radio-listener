@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 
 .wheels/
-.audio/
+.audio/**
+!.audio/.gitkeep
 .logs/**
 !.logs/.gitkeep

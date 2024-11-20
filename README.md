@@ -21,6 +21,12 @@ sudo apt-get install python-pyaudio python3-pyaudio
 sudo apt-get install portaudio19-dev
 ```
 
+Then install [ffmpeg](http://www.ffmpeg.org/) for mp3 support on [pydub](https://github.com/jiaaro/pydub)
+
+```shell
+apt-get install ffmpeg libavcodec-extra
+```
+
 ## Code descriptions
 
 - `./src/mic_sample.py`: Use [SpeechRecognition](https://github.com/Uberi/speech_recognition) library to read the computer's microphone(or other input device) and execute the [OpenAI's Whisper model](https://github.com/openai/whisper) to recognize the speech and log it to the screen(`std`).
@@ -45,6 +51,16 @@ sudo apt-get install portaudio19-dev
 
     # Or you can preselect the device index(believe me, you will remember it after a while...)
     python ./src/mic_writer.py --device-index 9
+    ```
+
+- `./src/mic_writer_whisper.py`: More or less like `./src/mic_writer.py`, but this time it is using [OpenAI's Whisper model](https://github.com/openai/whisper) `medium` model directly and writing the audio as mp3 at `./.audio/{yyyy-mm-dd}/*.mp3`.
+
+    ```shell
+    # It will ask to select an input device
+    python ./src/mic_writer_whisper.py
+
+    # Or you can preselect the device index
+    python ./src/mic_writer_whisper.py --device-index 9
     ```
 
 ## Development
