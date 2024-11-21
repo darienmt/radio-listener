@@ -2,6 +2,8 @@ import argparse
 import pyaudio
 import logging
 import io
+import time
+import json
 from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 from queue import Queue
@@ -46,7 +48,7 @@ def output_writer(log_path, model_description, control, output):
         print( message )
         logger.info(message)
 
-def recognize_whisper(recognizer, model, control, bus, output, binary_queue):
+def recognize_whisper(model, control, bus, output, binary_queue, recognition_queue):
     whisper_model = whisper.load_model(model)
     output.put({ "time": datetime.now(), "message": "Model loaded..." })
     while not control.empty():
@@ -65,7 +67,9 @@ def recognize_whisper(recognizer, model, control, bus, output, binary_queue):
                 fp16=torch.cuda.is_available()
             )
             
-            segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.5 ]
+            recognition_queue.put({ "time": now, "data": result })
+            
+            segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.4 ]
             if len(segments) == 0:
                 continue
 
@@ -101,7 +105,7 @@ def mp3_writer(audio_path, control, binary_queue):
 
         frames.append(segment_info["data"])
 
-        if (sound_time - last_time).total_seconds() < 10:
+        if (sound_time - last_time).total_seconds() < 60:
             last_time = sound_time
             continue
         
@@ -114,6 +118,22 @@ def mp3_writer(audio_path, control, binary_queue):
     if len(frames) > 0:
         write_mp3(frames, first_time, datetime.now(), audio_path)
 
+def recognition_writer(path, control, recognition_queue):
+    logger = logging.getLogger("RecognitionLog")
+    logger.setLevel(logging.INFO)
+
+    handler =  TimedRotatingFileHandler(
+        f"{path}/recognition.log", 
+        when="h",
+        interval= 4
+    )
+    logger.addHandler(handler)
+    while not control.empty():
+        data = recognition_queue.get()
+        data_time = f"{data['time']}"
+        data_data = data["data"]
+        logger.info(json.dumps({ "time": data_time, "data": data_data }))
+
 def start_processing(device_index):
 
     model_name = "medium"
@@ -122,6 +142,7 @@ def start_processing(device_index):
     recordings = Queue()
     output = Queue()
     binary_queue = Queue()
+    recognition_queue = Queue()
 
     messages.put(True)
 
@@ -129,7 +150,7 @@ def start_processing(device_index):
     listener = Thread(target=listening, args=(r, device_index, messages, recordings, output,), daemon=True)
     listener.start()
 
-    recognizer = Thread(target=recognize_whisper, args=(r, model_name, messages, recordings, output, binary_queue,), daemon=True)
+    recognizer = Thread(target=recognize_whisper, args=(model_name, messages, recordings, output, binary_queue, recognition_queue,), daemon=True)
     recognizer.start()
 
     writer = Thread(target=output_writer, args=(".logs/radio-traffic.log", f"Whisper:{model_name}", messages,output,), daemon=True)
@@ -138,9 +159,13 @@ def start_processing(device_index):
     mp3_writer_ = Thread(target=mp3_writer, args=(".audio", messages, binary_queue,), daemon=True)
     mp3_writer_.start()
     
+    recognition_writer_ = Thread(target=recognition_writer, args=(".recognition", messages, recognition_queue,), daemon=True)
+    recognition_writer_.start()
+
     input()
     messages.get()
-    mp3_writer.join()
+    print("Stopping...")
+    time.sleep(1)
 
 
 def main():
