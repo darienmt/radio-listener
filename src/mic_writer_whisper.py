@@ -64,11 +64,12 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
 
             result = whisper_model.transcribe(
                 audio_array,
-                fp16=torch.cuda.is_available()
+                fp16=torch.cuda.is_available(),
+                temperature=0.2
             )
             
             recognition_queue.put({ "time": now, "data": result })
-            
+
             segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.4 ]
             if len(segments) == 0:
                 continue
