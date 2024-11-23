@@ -64,17 +64,18 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
 
             result = whisper_model.transcribe(
                 audio_array,
-                fp16=torch.cuda.is_available(),
-                temperature=0.2
+                fp16=torch.cuda.is_available()
             )
             
             recognition_queue.put({ "time": now, "data": result })
 
-            segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.4 ]
-            if len(segments) == 0:
-                continue
+            # segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.55 ]
+            segments = [s["text"].strip() for s in result["segments"] if s["text"].strip() != "" ]
+            if len(segments) > 0:
+                text = " ".join(segments)   
+            else:
+                text = f"[** No recognition non_speech_prob = {[s['no_speech_prob'] for s in result['segments']]} **]"
 
-            text = " ".join(segments)   
             output.put({ "time": now, "message": text })
             binary_queue.put({ "time": now, "data": wav_bytes })
         except sr.UnknownValueError:
