@@ -95,7 +95,6 @@ def write_mp3(frames, from_time, to_time, audio_path):
 
 def mp3_writer(audio_path, control, binary_queue):
     first_time = None
-    last_time = None
     frames = []
     while not control.empty():
         segment_info = binary_queue.get()
@@ -103,19 +102,16 @@ def mp3_writer(audio_path, control, binary_queue):
         sound_data = segment_info["data"]
         if first_time is None:
                 first_time = sound_time - timedelta(seconds=len(sound_data)/sampling_rate/2)
-                last_time = sound_time
 
         frames.append(segment_info["data"])
 
-        if (sound_time - last_time).total_seconds() < 60:
-            last_time = sound_time
-            continue
-        
-        write_mp3(frames, first_time, sound_time, audio_path)
+        if len(frames) >= sampling_rate*60*2:
+            write_mp3(frames, first_time, first_time, audio_path)
 
-        frames = []
-        first_time = None
-        last_time = sound_time
+            frames = []
+            first_time = None
+        
+        
 
     if len(frames) > 0:
         write_mp3(frames, first_time, datetime.now(), audio_path)
