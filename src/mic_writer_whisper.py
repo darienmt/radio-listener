@@ -70,13 +70,11 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
             recognition_queue.put({ "time": now, "data": result })
 
             # segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.55 ]
-            segments = [s["text"].strip() for s in result["segments"] if s["text"].strip() != "" ]
+            segments = [s["text"].strip() for s in result["segments"] if s["text"].strip() != "" and s["no_speech_prob"] < 0.8]
             if len(segments) > 0:
                 text = " ".join(segments)   
-            else:
-                text = f"[** No recognition non_speech_prob = {[s['no_speech_prob'] for s in result['segments']]} **]"
-
-            output.put({ "time": now, "message": text })
+                output.put({ "time": now, "message": text })
+            
             binary_queue.put({ "time": now, "data": wav_bytes })
         except sr.UnknownValueError:
             output.put("Could not understand audio")
@@ -94,7 +92,7 @@ def write_mp3(frames, from_time, to_time, audio_path):
     
 
 def mp3_writer(audio_path, control, binary_queue):
-    first_time = None
+    first_time = datetime.now()
     frames = []
     while not control.empty():
         segment_info = binary_queue.get()
@@ -105,11 +103,11 @@ def mp3_writer(audio_path, control, binary_queue):
 
         frames.append(segment_info["data"])
 
-        if len(frames) >= sampling_rate*60*2:
+        if len(frames) > 0 and (datetime.now() - first_time).total_seconds() > 60 :
             write_mp3(frames, first_time, first_time, audio_path)
 
             frames = []
-            first_time = None
+            first_time = datetime.now()
         
         
 
