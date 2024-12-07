@@ -4,6 +4,7 @@ import logging
 import io
 import time
 import json
+import base64
 from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 from queue import Queue
@@ -13,6 +14,7 @@ import whisper
 import numpy as np
 import soundfile as sf
 import torch
+import statistics
 
 from pydub import AudioSegment
 
@@ -45,7 +47,9 @@ def output_writer(log_path, model_description, control, output):
         data = output.get()
 
         message = f"[{ data.get('time') }][{model_description}] : { data.get('message') }"
-        print( message )
+        no_screen = data.get("noscreen")
+        if no_screen != True:
+            print( message )
         logger.info(message)
 
 def recognize_whisper(model, control, bus, output, binary_queue, recognition_queue):
@@ -64,22 +68,25 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
 
             result = whisper_model.transcribe(
                 audio_array,
-                fp16=torch.cuda.is_available()
+                fp16=torch.cuda.is_available(),
+                language="en"
             )
             
-            recognition_queue.put({ "time": now, "data": result })
+            recognition_queue.put({ "time": now, "data": result, "bytes": audio_array })
 
             # segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.55 ]
             segments = [s["text"].strip() for s in result["segments"] if s["text"].strip() != "" and s["no_speech_prob"] < 0.8]
             if len(segments) > 0:
                 text = " ".join(segments)   
-                output.put({ "time": now, "message": text })
+                output.put({ "time": now, "message": text, "noscreen": True })
             
             binary_queue.put({ "time": now, "data": wav_bytes })
         except sr.UnknownValueError:
-            output.put("Could not understand audio")
+
+            output.put({ "time": datetime.now(), "message": "Could not understand audio" })
         except sr.RequestError as e:
-            output.put("Could not get results from API; {0}".format(e))
+            message = "Could not get results from API; {0}".format(e)
+            output.put({ "time": datetime.now(), "message": message })
 
 def write_mp3(frames, from_time, to_time, audio_path):
     date = to_time.strftime('%Y-%m-%d')
@@ -130,6 +137,25 @@ def recognition_writer(path, control, recognition_queue):
         data_data = data["data"]
         logger.info(json.dumps({ "time": data_time, "data": data_data }))
 
+def report_queue_size(control, bus, output):
+    sleep_time = 5 # seconds
+    report_average_time = 60 # seconds
+    counter = 0
+    queue_sizes = []
+    output.put({ "time": datetime.now(), "message": "Queue size reporting..." })
+    while not control.empty():
+        time.sleep(sleep_time)
+        counter = counter + 1
+        if ( counter*sleep_time > report_average_time ):
+
+            counter = 0
+            message = f"Average recording queue size [{report_average_time} seconds]: {statistics.fmean(queue_sizes)}"
+            output.put({ "time": datetime.now(), "message": message })
+            queue_sizes = []
+        else:
+            queue_sizes.append(bus.qsize())
+    
+
 def start_processing(device_index):
 
     model_name = "medium"
@@ -158,10 +184,14 @@ def start_processing(device_index):
     recognition_writer_ = Thread(target=recognition_writer, args=(".recognition", messages, recognition_queue,), daemon=True)
     recognition_writer_.start()
 
+    queue_reporter = Thread(target=report_queue_size, args=(messages, recordings, output, ), daemon=True)
+    queue_reporter.start()
+
     input()
     messages.get()
     print("Stopping...")
     time.sleep(1)
+
 
 
 def main():
