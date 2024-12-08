@@ -30,7 +30,7 @@ def listening(recognizer, selected_device_index, control, bus, output):
         recognizer.adjust_for_ambient_noise(source)
         output.put({ "time": datetime.now(), "message": "Listening..." })
         while not control.empty():
-            bus.put( recognizer.listen(source) )
+            bus.put( { "time": datetime.now(), "data": recognizer.listen(source) } )
 
 def output_writer(log_path, model_description, control, output):
     logger = logging.getLogger("AirLog")
@@ -57,7 +57,9 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
     output.put({ "time": datetime.now(), "message": "Model loaded..." })
     while not control.empty():
         try:
-            data = bus.get()
+            record = bus.get()
+            data = record["data"]
+            record_time = record["time"]
             now = datetime.now()
             # Following SpeechRecognition code to interact with whisper
             # 16 kHz https://github.com/openai/whisper/blob/28769fcfe50755a817ab922a7bc83483159600a9/whisper/audio.py#L98-L99
@@ -72,21 +74,21 @@ def recognize_whisper(model, control, bus, output, binary_queue, recognition_que
                 language="en"
             )
             
-            recognition_queue.put({ "time": now, "data": result, "bytes": audio_array })
+            recognition_queue.put({ "time": now, "originalTime": record_time, "data": result, "bytes": audio_array })
 
             # segments = [s["text"].strip() for s in result["segments"] if s["no_speech_prob"] < 0.55 ]
             segments = [s["text"].strip() for s in result["segments"] if s["text"].strip() != "" and s["no_speech_prob"] < 0.8]
             if len(segments) > 0:
                 text = " ".join(segments)   
-                output.put({ "time": now, "message": text, "noscreen": True })
+                output.put({ "time": record_time, "message": text, "noscreen": True })
             
-            binary_queue.put({ "time": now, "data": wav_bytes })
+            binary_queue.put({ "time": record_time, "recognitionTime": record_time, "data": wav_bytes })
         except sr.UnknownValueError:
 
-            output.put({ "time": datetime.now(), "message": "Could not understand audio" })
+            output.put({ "time": now, "message": "Could not understand audio" })
         except sr.RequestError as e:
             message = "Could not get results from API; {0}".format(e)
-            output.put({ "time": datetime.now(), "message": message })
+            output.put({ "time": now, "message": message })
 
 def write_mp3(frames, from_time, to_time, audio_path):
     date = to_time.strftime('%Y-%m-%d')
